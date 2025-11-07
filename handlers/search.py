@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional, List
 
 from aiogram import F, Router, Bot
 from aiogram.types import Message, CallbackQuery, InlineQuery, InlineQueryResultArticle, InputTextMessageContent
+from aiogram.fsm.context import FSMContext
 
 from database import Database
 
@@ -18,7 +19,6 @@ router = Router()
 # Обработчик инлайн-запросов будет добавлен в bot_modular.py
 
 from keyboards import Keyboards
-from user_data import get_user_data, set_user_data
 from analytics import activity_tracker
 
 logger = logging.getLogger(__name__)
@@ -31,9 +31,9 @@ class SearchHandlers:
         self.db = db
         self.bot = bot
 
-    async def start_search(self, message: Message, user_id: int, edit: bool = False):
+    async def start_search(self, message: Message, user_id: int, state: FSMContext, edit: bool = False):
         """Начать поиск по заметкам"""
-        set_user_data(user_id, "awaiting_note_search", True)
+        await state.update_data(awaiting_note_search=True)
         text = "🔍 <b>Поиск заметок</b>\n\nОтправьте ключевые слова или фразу для поиска."
 
         if edit:

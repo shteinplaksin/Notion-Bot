@@ -19,7 +19,6 @@ router = Router()
 from keyboards import Keyboards
 from file_manager import file_manager
 from security import security_manager
-from user_data import get_user_data
 from analytics import activity_tracker
 
 logger = logging.getLogger(__name__)

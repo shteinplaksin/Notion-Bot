@@ -167,6 +167,15 @@ class VoiceToTextConverter:
     def __init__(self):
         self.supported_formats = ['.ogg', '.mp3', '.wav', '.m4a', '.opus']
     
+    def _blocking_speech_recognition(self, wav_path: str, language: str) -> str:
+        import speech_recognition as sr
+        
+        recognizer = sr.Recognizer()
+        with sr.AudioFile(wav_path) as source:
+            audio = recognizer.record(source)
+        text = recognizer.recognize_google(audio, language=language)
+        return text
+
     async def convert_voice_to_text(self, file_path: str, language: str = 'ru-RU') -> Dict[str, Any]:
         """Конвертация голосового сообщения в текст"""
         try:
@@ -180,9 +189,7 @@ class VoiceToTextConverter:
                 wav_path = await self._convert_to_wav(file_path)
                 
                 # Распознаем речь
-                with sr.AudioFile(wav_path) as source:
-                    audio = recognizer.record(source)
-                
+                text = await asyncio.to_thread(self._blocking_speech_recognition, wav_path, language)
                 # Используем Google Speech Recognition
                 text = recognizer.recognize_google(audio, language=language)
                 
@@ -217,6 +224,24 @@ class VoiceToTextConverter:
             logger.error(f"Error converting voice to text: {e}")
             return {'success': False, 'error': str(e)}
     
+    def _blocking_convert_to_wav(self, file_path: str, file_extension: str) -> str:
+        from pydub import AudioSegment
+        
+        if file_extension == '.ogg':
+            audio = AudioSegment.from_ogg(file_path)
+        elif file_extension == '.mp3':
+            audio = AudioSegment.from_mp3(file_path)
+        elif file_extension == '.m4a':
+            audio = AudioSegment.from_file(file_path, format="m4a")
+        elif file_extension == '.opus':
+            audio = AudioSegment.from_file(file_path, format="opus")
+        else:
+            audio = AudioSegment.from_file(file_path)
+        
+        wav_path = file_path.replace(file_extension, '.wav')
+        audio.export(wav_path, format="wav")
+        return wav_path
+
     async def _convert_to_wav(self, file_path: str) -> str:
         """Конвертация аудио в WAV формат"""
         file_extension = Path(file_path).suffix.lower()
@@ -225,24 +250,7 @@ class VoiceToTextConverter:
             return file_path
         
         try:
-            from pydub import AudioSegment
-            
-            # Загружаем аудио файл
-            if file_extension == '.ogg':
-                audio = AudioSegment.from_ogg(file_path)
-            elif file_extension == '.mp3':
-                audio = AudioSegment.from_mp3(file_path)
-            elif file_extension == '.m4a':
-                audio = AudioSegment.from_file(file_path, format="m4a")
-            elif file_extension == '.opus':
-                audio = AudioSegment.from_file(file_path, format="opus")
-            else:
-                audio = AudioSegment.from_file(file_path)
-            
-            # Конвертируем в WAV
-            wav_path = file_path.replace(file_extension, '.wav')
-            audio.export(wav_path, format="wav")
-            
+            wav_path = await asyncio.to_thread(self._blocking_convert_to_wav, file_path, file_extension)
             return wav_path
             
         except ImportError:
@@ -305,27 +313,35 @@ class DocumentProcessor:
                     continue
             return {'success': False, 'error': 'Не удалось определить кодировку файла'}
     
+    def _blocking_pdf_extraction(self, file_path: str) -> str:
+        import PyPDF2
+        text = ""
+        with open(file_path, 'rb') as file:
+            pdf_reader = PyPDF2.PdfReader(file)
+            for page in pdf_reader.pages:
+                text += page.extract_text() + "\n"
+        return text
+
     async def _extract_from_pdf(self, file_path: str) -> Dict[str, Any]:
         """Извлечение текста из PDF файла"""
         try:
-            import PyPDF2
-            text = ""
-            with open(file_path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
-                for page in pdf_reader.pages:
-                    text += page.extract_text() + "\n"
+            text = await asyncio.to_thread(self._blocking_pdf_extraction, file_path)
             return {'success': True, 'text': text}
         except ImportError:
             return {'success': True, 'text': f'PDF документ: {Path(file_path).name}'}
         except Exception as e:
             return {'success': False, 'error': f'Ошибка чтения PDF: {e}'}
     
+    def _blocking_word_extraction(self, file_path: str) -> str:
+        import docx
+        doc = docx.Document(file_path)
+        text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
+        return text
+
     async def _extract_from_word(self, file_path: str) -> Dict[str, Any]:
         """Извлечение текста из Word документа"""
         try:
-            import docx
-            doc = docx.Document(file_path)
-            text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
+            text = await asyncio.to_thread(self._blocking_word_extraction, file_path)
             return {'success': True, 'text': text}
         except ImportError:
             return {'success': True, 'text': f'Word документ: {Path(file_path).name}'}
