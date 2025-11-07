@@ -54,7 +54,7 @@ db_path = Path(DATABASE_PATH)
 if not db_path.is_absolute():
     db_path = BASE_DIR / db_path
 
-fsm_storage_path = BASE_DIR / "notes_bot_fsm.db"
+fsm_storage_path = BASE_DIR / "data" / "notes_bot_fsm.db"
 storage = SQLStorage(db_path=str(fsm_storage_path))
 dp = Dispatcher(storage=storage)
 
@@ -222,6 +222,10 @@ async def reminder_scheduler():
 async def main():
     """Основная функция запуска бота"""
     try:
+        # Создаем директорию для данных, если её нет
+        data_dir = BASE_DIR / "data"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        
         await db.init_db()
         logger.info("База данных подготовлена")
 

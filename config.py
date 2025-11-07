@@ -21,7 +21,7 @@ except ImportError:
 BOT_TOKEN: Optional[str] = os.getenv('BOT_TOKEN')
 
 # Путь к базе данных
-DATABASE_PATH = os.getenv('DATABASE_PATH', "notes_bot.db")
+DATABASE_PATH = os.getenv('DATABASE_PATH', "data/notes_bot.db")
 
 # Другие настройки
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'

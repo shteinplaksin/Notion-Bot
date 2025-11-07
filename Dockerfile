@@ -25,7 +25,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Создаем необходимые директории
-RUN mkdir -p files/audio files/documents files/images files/temp
+RUN mkdir -p files/audio files/documents files/images files/temp data
 
 # Создаем пользователя без root прав
 RUN useradd --create-home --shell /bin/bash botuser
