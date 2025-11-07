@@ -190,8 +190,6 @@ class VoiceToTextConverter:
                 
                 # Распознаем речь
                 text = await asyncio.to_thread(self._blocking_speech_recognition, wav_path, language)
-                # Используем Google Speech Recognition
-                text = recognizer.recognize_google(audio, language=language)
                 
                 # Удаляем временный файл
                 if wav_path != file_path:

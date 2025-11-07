@@ -16,8 +16,6 @@ from database import Database
 
 router = Router()
 
-# Обработчик инлайн-запросов будет добавлен в bot_modular.py
-
 from keyboards import Keyboards
 from analytics import activity_tracker
 
@@ -41,7 +39,7 @@ class SearchHandlers:
         else:
             await message.answer(text, reply_markup=Keyboards.back_button("notes_menu"), parse_mode="HTML")
 
-    async def process_search_query(self, message: Message, user_id: int):
+    async def process_search_query(self, message: Message, user_id: int, state: FSMContext):
         """Обработать поисковый запрос"""
         query = message.text.strip()
         if len(query) < 2:
@@ -52,7 +50,6 @@ class SearchHandlers:
             return
 
         try:
-            # Поиск по заметкам
             notes = await self.db.search_notes(user_id, query, limit=10)
 
             if not notes:
@@ -69,17 +66,15 @@ class SearchHandlers:
                 text += f"{pinned}<b>{html.escape(title)}</b>\n"
 
                 if note.get('content'):
-                    # Подсвечиваем найденные слова
                     content = note['content'][:150] + "..." if len(note['content']) > 150 else note['content']
-                    # Здесь можно добавить подсветку найденных слов
                     text += f"<i>{html.escape(content)}</i>\n"
 
                 text += f"📁 {note['category']} • {note['created_at'][:10]}\n\n"
 
-            # Добавляем кнопки для действий с результатами поиска
             keyboard = Keyboards.search_results_keyboard(query)
 
             await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+            await state.update_data(awaiting_note_search=False)
 
         except Exception as e:
             logger.error(f"Error in search: {e}")
@@ -103,10 +98,8 @@ class SearchHandlers:
         user_id = callback.from_user.id
 
         try:
-            # Получаем заметки категории
             category_notes = await self.db.get_notes(user_id, category=category_name, limit=100)
 
-            # Фильтруем по поисковому запросу
             filtered_notes = []
             for note in category_notes:
                 title_match = query.lower() in (note.get('title', '') or '').lower()
@@ -140,8 +133,6 @@ class SearchHandlers:
     async def search_by_date_range(self, message: Message, user_id: int, start_date: str, end_date: str):
         """Поиск по диапазону дат"""
         try:
-            # Здесь можно реализовать поиск по датам
-            # Пока заглушка
             await message.answer(
                 "📅 <b>Поиск по датам</b>\n\n"
                 f"Поиск заметок с {start_date} по {end_date}\n\n"
@@ -159,7 +150,6 @@ class SearchHandlers:
             user_id = inline_query.from_user.id
 
             if not query:
-                # Показываем популярные заметки
                 notes = await self.db.get_notes(user_id, limit=10)
                 results = []
 
@@ -182,7 +172,6 @@ class SearchHandlers:
                 await inline_query.answer(results[:10], cache_time=30)
                 return
 
-            # Поиск заметок
             search_results = await self.search_notes(query, user_id, limit=10)
 
             if search_results:
@@ -205,7 +194,6 @@ class SearchHandlers:
 
                 await inline_query.answer(results[:10], cache_time=30)
             else:
-                # Нет результатов
                 await inline_query.answer([
                     InlineQueryResultArticle(
                         id="no_results",
@@ -223,8 +211,7 @@ class SearchHandlers:
     async def search_notes(self, query: str, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         """Поиск заметок по запросу"""
         try:
-            # Получаем заметки пользователя
-            notes = await self.db.get_notes(user_id, limit=limit * 2)  # Берем больше для фильтрации
+            notes = await self.db.get_notes(user_id, limit=limit * 2)
 
             results = []
             query_lower = query.lower()
@@ -233,13 +220,11 @@ class SearchHandlers:
                 title = note.get("title", "").lower()
                 content = note.get("content", "").lower()
 
-                # Проверяем совпадения
                 if (query_lower in title or
                     query_lower in content or
                     any(word in title for word in query_lower.split()) or
                     any(word in content for word in query_lower.split())):
 
-                    # Вычисляем релевантность
                     relevance = 0
                     if query_lower in title:
                         relevance += 10
@@ -256,7 +241,6 @@ class SearchHandlers:
                         "search_relevance": relevance
                     })
 
-            # Сортируем по релевантности
             results.sort(key=lambda x: x["search_relevance"], reverse=True)
 
             return results[:limit]
@@ -264,3 +248,16 @@ class SearchHandlers:
         except Exception as e:
             logger.error(f"Error searching notes: {e}")
             return []
+
+
+@router.message(F.text)
+async def handle_text_message_for_search(message: Message, state: FSMContext):
+    """Обработка текстовых сообщений для поиска"""
+    try:
+        data = await state.get_data()
+        if data.get("awaiting_note_search"):
+            from bot_modular import db, bot
+            search_handler = SearchHandlers(db, bot)
+            await search_handler.process_search_query(message, message.from_user.id, state)
+    except Exception as e:
+        logger.error(f"Error handling text message for search: {e}")
