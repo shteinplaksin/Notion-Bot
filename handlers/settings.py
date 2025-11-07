@@ -16,7 +16,6 @@ from database import Database
 
 router = Router()
 from keyboards import Keyboards
-from user_data import get_user_data, set_user_data
 from analytics import activity_tracker
 
 logger = logging.getLogger(__name__)

@@ -12,7 +12,6 @@ from typing import Dict, Any, Optional
 from database import Database
 from keyboards import Keyboards
 from time_utils import TimeParser
-from user_data import get_user_data, set_user_data
 from analytics import activity_tracker
 from handlers.notes import NotesHandlers
 from handlers.reminders import ReminderHandlers
@@ -144,10 +143,11 @@ async def cmd_new_note(message: Message, state: FSMContext):
             text = args[1]
             reminder_time, remaining_text = TimeParser().parse_time_input(text)
 
-            user_data_dict = get_user_data(message.from_user.id)
-            user_data_dict['note_title'] = remaining_text[:50]
-            user_data_dict['note_content'] = remaining_text
-            user_data_dict['reminder_time'] = reminder_time
+            await state.update_data(
+                note_title=remaining_text[:50],
+                note_content=remaining_text,
+                reminder_time=reminder_time
+            )
 
             if reminder_time:
                 await message.answer(
