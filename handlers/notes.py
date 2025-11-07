@@ -12,7 +12,6 @@ from database import Database
 from keyboards import Keyboards
 from states import NoteStates
 from time_utils import parse_time_input, TimeParser
-from user_data import get_user_data, set_user_data
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -35,14 +34,19 @@ class NotesHandlers:
                 pass
         await message.answer(text, reply_markup=reply_markup, parse_mode=parse_mode)
 
-    async def show_notes_menu(self, message: Message, user_id: int, *, edit: bool = False):
+    async def show_notes_menu(self, message: Message, user_id: int, state: FSMContext = None, *, edit: bool = False):
         """Показать меню заметок"""
         text = """📒 <b>Заметки</b>\n\nВыберите действие ниже, чтобы создать новую запись или открыть существующие заметки."""
         await self._safe_edit_or_send(message, text, reply_markup=Keyboards.notes_menu(), edit=edit)
-        set_user_data(user_id, "notes_current_list", "all")
-        get_user_data(user_id).pop("awaiting_note_search", None)
+        if state:
+            await state.update_data(notes_current_list="all")
+            data = await state.get_data()
+            if "awaiting_note_search" in data:
+                data_copy = data.copy()
+                data_copy.pop("awaiting_note_search", None)
+                await state.set_data(data_copy)
 
-    async def show_notes_list(self, message: Message, user_id: int, list_type: str = "all", *, edit: bool = False):
+    async def show_notes_list(self, message: Message, user_id: int, list_type: str = "all", state: FSMContext = None, *, edit: bool = False):
         """Показать список заметок"""
         if list_type.startswith("category:"):
             category_name = list_type.split(":", 1)[1]
@@ -76,7 +80,8 @@ class NotesHandlers:
         text_block = "\n".join(lines)
         markup = Keyboards.notes_list(notes[:20], list_type=list_type)
         await self._safe_edit_or_send(message, text_block, reply_markup=markup, edit=edit)
-        set_user_data(user_id, "notes_current_list", list_type)
+        if state:
+            await state.update_data(notes_current_list=list_type)
 
     async def create_note_interactive(self, message: Message, state: FSMContext):
         """Начать интерактивное создание заметки"""
@@ -307,7 +312,7 @@ class NotesHandlers:
             return None
 
 
-    async def show_note_detail(self, message: Message, user_id: int, note_id: int, list_type: str = "all", *, edit: bool = False):
+    async def show_note_detail(self, message: Message, user_id: int, note_id: int, list_type: str = "all", state: FSMContext = None, *, edit: bool = False):
         """Показать детали заметки"""
         note = await self.db.get_note(note_id, user_id)
         if not note:
@@ -339,22 +344,26 @@ class NotesHandlers:
 
         markup = Keyboards.note_actions(note_id, bool(note.get("is_pinned")), list_type=list_type)
         await self._safe_edit_or_send(message, text_block, reply_markup=markup, edit=edit)
-        set_user_data(user_id, "notes_current_list", list_type)
-        set_user_data(user_id, "notes_last_note_id", note_id)
-        set_user_data(user_id, "notes_last_list_type", list_type)
+        if state:
+            await state.update_data(
+                notes_current_list=list_type,
+                notes_last_note_id=note_id,
+                notes_last_list_type=list_type
+            )
         return True
 
 
-    async def show_note_creation_choice(self, message: Message, user_id: int, origin: str, back_callback: str, *, edit: bool = True):
+    async def show_note_creation_choice(self, message: Message, user_id: int, origin: str, back_callback: str, state: FSMContext = None, *, edit: bool = True):
         """Показ этапа выбора перед созданием заметки."""
         prompt_text = "✍️ <b>Создание заметки</b>\n\nНажмите «Создать», чтобы ввести заголовок, или вернитесь назад."
         start_callback = f"create_note_start_{origin}"
-        if origin.startswith('list_'):
-            list_type = origin.split('_', 1)[1]
-            set_user_data(user_id, "note_creation_list_type", list_type)
-        else:
-            set_user_data(user_id, "note_creation_list_type", "all")
-        set_user_data(user_id, "note_creation_origin", origin)
+        if state:
+            if origin.startswith('list_'):
+                list_type = origin.split('_', 1)[1]
+                await state.update_data(note_creation_list_type=list_type)
+            else:
+                await state.update_data(note_creation_list_type="all")
+            await state.update_data(note_creation_origin=origin)
         markup = Keyboards.note_creation_options(back_callback=back_callback, start_callback=start_callback)
         await self._safe_edit_or_send(message, prompt_text, reply_markup=markup, edit=edit)
 
@@ -363,15 +372,14 @@ class NotesHandlers:
         try:
             args = message.text.split(maxsplit=1)
             if len(args) > 1:
-                # Пытаемся извлечь время из текста
                 text = args[1]
                 reminder_time, remaining_text = parse_time_input(text)
 
-                from user_data import get_user_data
-                user_data_dict = get_user_data(message.from_user.id)
-                user_data_dict['note_title'] = remaining_text[:50]
-                user_data_dict['note_content'] = remaining_text
-                user_data_dict['reminder_time'] = reminder_time
+                await state.update_data(
+                    note_title=remaining_text[:50],
+                    note_content=remaining_text,
+                    reminder_time=reminder_time
+                )
 
                 if reminder_time:
                     await message.answer(
@@ -383,7 +391,6 @@ class NotesHandlers:
                         parse_mode="HTML"
                     )
                 else:
-                    # Создаем заметку сразу
                     note_id = await self.db.add_note(
                         user_id=message.from_user.id,
                         title=remaining_text[:50],

@@ -22,7 +22,6 @@ from database import Database
 from keyboards import Keyboards
 from time_utils import TimeParser, parse_time_input, calculate_next_reminder_time
 from states import NoteStates, ReminderStates, CategoryStates, FileStates, TaskStates, GoalStates
-from user_data import get_user_data, set_user_data, clear_user_data
 from security import security_manager
 from file_manager import file_manager, voice_converter, document_processor
 from analytics import activity_tracker, ProductivityAnalyzer, ReportGenerator
